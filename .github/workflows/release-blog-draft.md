@@ -99,9 +99,16 @@ steps:
       gh_retry -X GET search/issues \
         -f q="repo:adoptium/temurin in:title (\"Release Status\" OR \"Checklist for Temurin Release\" OR \"Retrospective\") updated:>=$SINCE" \
         -f per_page=30 \
-        --jq '[.items[] | {number, title, state, url: .html_url, updated: .updated_at, body: (.body // "" | .[0:4000])}]' \
+        --jq '[.items[] | {number, title, state, url: .html_url, updated: .updated_at, body: (.body // "" | .[0:12000])}]' \
         > "$AGENT_DIR/release-summaries.json"
       [ -s "$AGENT_DIR/release-summaries.json" ] || echo '[]' > "$AGENT_DIR/release-summaries.json"
+
+      # 2b. The release plan from adoptium/mirror-scripts: its GA tags (e.g.
+      #     jdk-26.0.2-ga) pin the exact upstream tags/SHAs for each version in
+      #     the release, letting the agent derive full version+build strings.
+      gh_retry "repos/adoptium/mirror-scripts/contents/releasePlan.cfg" \
+        --jq '.content' | base64 -d > "$AGENT_DIR/releasePlan.cfg" 2>/dev/null || true
+      [ -s "$AGENT_DIR/releasePlan.cfg" ] || echo "unavailable" > "$AGENT_DIR/releasePlan.cfg"
 
       # 3. Notable delivery changes: merged PRs since the window in the delivery repos.
       : > "$AGENT_DIR/repo-activity.json"
@@ -162,6 +169,7 @@ The person who started this run provided:
 
 - `/tmp/gh-aw/agent/content-issue.md` — the human-collected content from the `adoptium/adoptium.net` issue for this release, if a `content_issue` was provided. This is the **primary source of truth** for the narrative when present. If it says "No content_issue provided", rely on the other files and clearly flag where human input is still needed.
 - `/tmp/gh-aw/agent/release-summaries.json` — release-tracking issues from `adoptium/temurin` updated during the release window: the release checklist, the per-platform release status matrix, and the release retrospective. Use these to confirm which versions and platforms are being delivered and to catch any release-specific notes.
+- `/tmp/gh-aw/agent/releasePlan.cfg` — the release plan from `adoptium/mirror-scripts`. Its GA tags name the exact upstream version for each JDK in the release (e.g. `jdk-26.0.2-ga` corresponds to the `jdk-26.0.2+10` build tag; the two tags share a SHA in the version's mirror repo such as `adoptium/jdk26u`).
 - `/tmp/gh-aw/agent/repo-activity.json` — merged pull requests since the window start in the delivery repositories (`temurin-build`, `installer`, `containers`), keyed by repository. Use these to identify notable changes in how binaries, installers, and containers are built and delivered. Summarize themes; do not list every PR.
 - `/tmp/gh-aw/agent/example-posts/` — the most recent published CPU-update and feature-release posts from `adoptium.net`. **These are the format authority.** If they differ from the template below, follow the examples.
 
@@ -207,7 +215,8 @@ for tags/package names, and bullet lists for platform/architecture coverage.>
 - **Title**: CPU posts list every version, comma-separated with a final "and" (`Eclipse Temurin 8u492, 11.0.31, 17.0.19, 21.0.11, 25.0.3 and 26.0.1 Available`); feature posts are just `Eclipse Temurin <NN> Available`.
 - **Author** is the literal string `pmc` (the site maps it to "Adoptium PMC") unless the content issue names someone else.
 - Feature posts typically close with the standing **Contributing To Eclipse Temurin** and **Become An Eclipse Temurin Sustainer** sections — copy those from the feature example post verbatim.
-- Full version strings with build numbers only appear in the body, not the title or description. If the gathered material does not give the build numbers, flag them as a needs-human-input gap.
+- Full version strings with build numbers only appear in the body, not the title or description. Derive them from the gathered material: the `Release status per Platform, Version & Binary Type` issue in `release-summaries.json` lists the exact version+build strings (e.g. `21.0.11+10`, `8u492-b09`), and `releasePlan.cfg` cross-confirms them via the GA tags. Only flag a build number as a needs-human-input gap if neither source has it.
+- **Release-notes links** use the exact form `https://adoptium.net/temurin/release-notes?version=jdk-25.0.3+9` (JDK 8 uses `jdk8u492-b09` style). These pages go live after publication, so keep the links even though they may 404 while drafting.
 
 ## Your task
 
