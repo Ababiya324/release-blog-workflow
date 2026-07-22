@@ -147,6 +147,10 @@ steps:
       ls -la "$AGENT_DIR"
 
 safe-outputs:
+  allowed-domains:
+    - adoptium.net
+    - hub.docker.com
+    - github.com
   noop:
     report-as-issue: false
   create-issue:
